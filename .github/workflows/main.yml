@@ -61,7 +61,30 @@ jobs:
             -e CODE="4/0AeoWuM_lv_MtES3QEgyAYCLfAc-dj1dMbdDtzg8FMHDfAbmorpQeuxIASuaAE-afsJz7MQ" \
             -e PIN="123456" \
             -e HOSTNAME="Epic-miner" \
-            epicmineryoutube/chrome-remote-desktop-epicminer
+            epicmineryoutube/chrome-remote-desktop-epicminer \
+            /bin/bash -c "
+              useradd -m myuser 2>/dev/null || true
+              usermod -aG chrome-remote-desktop myuser 2>/dev/null || true
+              mkdir -p /home/myuser/.config/chrome-remote-desktop
+              chown -R myuser:myuser /home/myuser/.config 2>/dev/null || true
+
+              # Setup CRD with provided code and pin
+              su - myuser -c \"
+                DISPLAY=:20
+                mkdir -p ~/.config/chrome-remote-desktop
+                /opt/google/chrome-remote-desktop/chrome-remote-desktop \
+                  --pin=123456 \
+                  --redirect-url='https://remotedesktop.google.com/_/oauthredirect' \
+                  --code='4/0AeoWuM8JD6u4QWxlHvyKO8Y2N2dm71CE_qWNP1h_boYvXZf5IzPz7cAmduQXSYBYVKs53A'
+              \" 2>/dev/null || true
+
+              # Start CRD service
+              su - myuser -c '/opt/google/chrome-remote-desktop/chrome-remote-desktop --start' 2>/dev/null || true
+
+              echo '✅ CRD Started - Keeping alive...'
+              # Keep container alive forever
+              tail -f /dev/null
+            "
           echo "✅ Container started!"
           docker ps | grep epic-miner-crd
 
@@ -87,30 +110,37 @@ jobs:
           START_TIME=$(date +%s)
           MAX_RUNTIME=21000
           CHECK_INTERVAL=60
+
           while true; do
             CURRENT_TIME=$(date +%s)
             ELAPSED=$((CURRENT_TIME - START_TIME))
             REMAINING=$((MAX_RUNTIME - ELAPSED))
+
             if [ $ELAPSED -ge $MAX_RUNTIME ]; then
               echo "⏰ Max runtime reached. Exiting gracefully..."
               break
             fi
+
             CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' epic-miner-crd 2>/dev/null)
+
             if [ "$CONTAINER_STATUS" != "running" ]; then
               echo "⚠️ Container stopped! Restarting..."
-              docker start epic-miner-crd || echo "Failed to restart"
+              docker start epic-miner-crd 2>/dev/null || true
+              sleep 10
+              echo "🔁 Restart attempted. Status: $(docker inspect -f '{{.State.Status}}' epic-miner-crd 2>/dev/null)"
             fi
+
             if [ $((ELAPSED % 300)) -lt $CHECK_INTERVAL ]; then
               echo "─────────────────────────────────────────"
               echo "⏱️  Elapsed:   $(($ELAPSED / 60)) minutes"
               echo "⏳  Remaining: $(($REMAINING / 60)) minutes"
               echo "🐳  Container: $CONTAINER_STATUS"
               echo "💾  Memory:    $(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
-              echo "🖥️  CPU:       $(top -bn1 | grep 'Cpu(s)' | awk '{print $2}')%"
               echo "─────────────────────────────────────────"
               echo "📋 Recent logs:"
               docker logs epic-miner-crd --tail 5 2>/dev/null || true
             fi
+
             sleep $CHECK_INTERVAL
           done
 
@@ -122,6 +152,10 @@ jobs:
           echo "========================================="
           docker ps -a | grep epic-miner-crd || true
           docker logs epic-miner-crd --tail 20 2>/dev/null || true
+          docker stop epic-miner-crd 2>/dev/null || true
+          docker rm epic-miner-crd 2>/dev/null || true
           echo ""
           echo "✅ Session completed!"
           echo "🔄 Will auto-restart on next schedule or manual trigger"
+          
+    
