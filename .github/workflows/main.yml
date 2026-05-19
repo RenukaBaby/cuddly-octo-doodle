@@ -1,21 +1,127 @@
-name: Run RDP Script
+name: 🚀 Chrome Remote Desktop - Epic Miner
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 */6 * * *'
 
 jobs:
-  run:
+  deploy:
+    name: 🖥️ Deploy Chrome Remote Desktop
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     steps:
-      - name: Clone repo
+      - name: 🖥️ Display System Info
         run: |
-          git clone https://github.com/epic-miner/RDP.git
-          cd RDP
-          ls -la
+          echo "========================================="
+          echo "         EPIC MINER - SYSTEM INFO        "
+          echo "========================================="
+          echo "OS:       $(uname -a)"
+          echo "CPU:      $(nproc) cores"
+          echo "RAM:      $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "Disk:     $(df -h / | awk 'NR==2 {print $4}') free"
+          echo "Docker:   $(docker --version)"
+          echo "========================================="
 
-      - name: Give permission & run script
+      - name: 🔧 Setup Environment
         run: |
-          cd RDP
-          chmod +x aman.sh
-          bash aman.sh
+          sudo apt-get update -y
+          sudo apt-get install -y curl wget net-tools htop
+          sudo mount -o remount,size=2G /dev/shm || true
+          free -h
+
+      - name: 🐳 Pull Docker Image
+        run: |
+          echo "Pulling image..."
+          docker pull epicmineryoutube/chrome-remote-desktop-epicminer
+          echo "✅ Image pulled successfully!"
+
+      - name: 🧹 Cleanup Old Containers
+        run: |
+          docker stop epic-miner-crd 2>/dev/null || true
+          docker rm epic-miner-crd 2>/dev/null || true
+          echo "✅ Cleanup complete!"
+
+      - name: 🚀 Start Chrome Remote Desktop
+        run: |
+          echo "========================================="
+          echo "   STARTING CHROME REMOTE DESKTOP        "
+          echo "========================================="
+          docker run -d \
+            --name epic-miner-crd \
+            --hostname Epic-miner \
+            --privileged \
+            --network host \
+            --shm-size="2g" \
+            -v /dev/shm:/dev/shm \
+            -e CODE="4/0AeoWuM_lv_MtES3QEgyAYCLfAc-dj1dMbdDtzg8FMHDfAbmorpQeuxIASuaAE-afsJz7MQ" \
+            -e PIN="123456" \
+            -e HOSTNAME="Epic-miner" \
+            epicmineryoutube/chrome-remote-desktop-epicminer
+          echo "✅ Container started!"
+          docker ps | grep epic-miner-crd
+
+      - name: ✅ Verify Container Running
+        run: |
+          echo "Waiting for container to initialize..."
+          sleep 30
+          echo "========================================="
+          echo "         CONTAINER STATUS                "
+          echo "========================================="
+          docker ps -a | grep epic-miner-crd
+          echo ""
+          echo "========================================="
+          echo "         CONTAINER LOGS                  "
+          echo "========================================="
+          docker logs epic-miner-crd --tail 50
+
+      - name: 💓 Health Check & Keep Alive
+        run: |
+          echo "========================================="
+          echo "   KEEPING SESSION ALIVE - MONITORING    "
+          echo "========================================="
+          START_TIME=$(date +%s)
+          MAX_RUNTIME=21000
+          CHECK_INTERVAL=60
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            REMAINING=$((MAX_RUNTIME - ELAPSED))
+            if [ $ELAPSED -ge $MAX_RUNTIME ]; then
+              echo "⏰ Max runtime reached. Exiting gracefully..."
+              break
+            fi
+            CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' epic-miner-crd 2>/dev/null)
+            if [ "$CONTAINER_STATUS" != "running" ]; then
+              echo "⚠️ Container stopped! Restarting..."
+              docker start epic-miner-crd || echo "Failed to restart"
+            fi
+            if [ $((ELAPSED % 300)) -lt $CHECK_INTERVAL ]; then
+              echo "─────────────────────────────────────────"
+              echo "⏱️  Elapsed:   $(($ELAPSED / 60)) minutes"
+              echo "⏳  Remaining: $(($REMAINING / 60)) minutes"
+              echo "🐳  Container: $CONTAINER_STATUS"
+              echo "💾  Memory:    $(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
+              echo "🖥️  CPU:       $(top -bn1 | grep 'Cpu(s)' | awk '{print $2}')%"
+              echo "─────────────────────────────────────────"
+              echo "📋 Recent logs:"
+              docker logs epic-miner-crd --tail 5 2>/dev/null || true
+            fi
+            sleep $CHECK_INTERVAL
+          done
+
+      - name: 🧹 Final Cleanup
+        if: always()
+        run: |
+          echo "========================================="
+          echo "         FINAL STATUS REPORT             "
+          echo "========================================="
+          docker ps -a | grep epic-miner-crd || true
+          docker logs epic-miner-crd --tail 20 2>/dev/null || true
+          echo ""
+          echo "✅ Session completed!"
+          echo "🔄 Will auto-restart on next schedule or manual trigger"
