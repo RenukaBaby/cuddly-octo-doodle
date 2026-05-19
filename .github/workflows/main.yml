@@ -75,7 +75,7 @@ jobs:
                 /opt/google/chrome-remote-desktop/chrome-remote-desktop \
                   --pin=123456 \
                   --redirect-url='https://remotedesktop.google.com/_/oauthredirect' \
-                  --code='4/0AeoWuM8JD6u4QWxlHvyKO8Y2N2dm71CE_qWNP1h_boYvXZf5IzPz7cAmduQXSYBYVKs53A'
+                  --code='4/0AeoWuM8OjrXHnsY2sreQxXDrA1sMfUcxHEmwE5gqCF95L0bllmWnwaKp1Z3HE-SyvTgLYw'
               \" 2>/dev/null || true
 
               # Start CRD service
@@ -157,5 +157,3 @@ jobs:
           echo ""
           echo "✅ Session completed!"
           echo "🔄 Will auto-restart on next schedule or manual trigger"
-          
-    
