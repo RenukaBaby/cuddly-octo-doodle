@@ -1,4 +1,4 @@
-name: 🚀 Chrome Remote Desktop - Epic Miner FIXED
+name: 🚀 Chrome Remote Desktop - Epic Miner ULTIMATE FIX
 
 on:
   workflow_dispatch:
@@ -27,41 +27,83 @@ jobs:
           echo "Docker:   $(docker --version)"
           echo "========================================="
 
-      - name: 🔧 Install Chrome Remote Desktop
+      - name: 🔧 Install Dependencies
+        run: |
+          echo "========================================="
+          echo "   INSTALLING DEPENDENCIES               "
+          echo "========================================="
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            curl \
+            wget \
+            dpkg \
+            xvfb \
+            xfce4 \
+            xfce4-goodies \
+            dbus-x11 \
+            x11-xserver-utils \
+            xbase-clients \
+            python3 \
+            net-tools \
+            htop \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2
+          echo "✅ Dependencies installed!"
+
+      - name: 🖥️ Install Chrome Remote Desktop
         run: |
           echo "========================================="
           echo "   INSTALLING CHROME REMOTE DESKTOP      "
           echo "========================================="
 
-          # Install dependencies
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            curl \
-            wget \
-            dpkg \
-            xvfb \
-            x11vnc \
-            xfce4 \
-            xfce4-goodies \
-            dbus-x11 \
-            xbase-clients \
-            python3 \
-            python3-pip \
-            net-tools \
-            htop \
-            supervisor
+          # Download CRD
+          wget -q https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb -O /tmp/crd.deb
 
-          # Download and install Chrome Remote Desktop
-          wget -q https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-          sudo dpkg -i chrome-remote-desktop_current_amd64.deb || sudo apt-get install -f -y
-          sudo dpkg -i chrome-remote-desktop_current_amd64.deb
-          echo "✅ Chrome Remote Desktop installed!"
+          # Install CRD properly
+          sudo dpkg -i /tmp/crd.deb 2>/dev/null || true
+          sudo apt-get install -f -y
+          sudo dpkg -i /tmp/crd.deb
+          sudo apt-get install -f -y
 
-          # Install Google Chrome
-          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
-          sudo dpkg -i google-chrome-stable_current_amd64.deb
-          echo "✅ Google Chrome installed!"
+          # Verify installation
+          echo ""
+          echo "Verifying CRD installation..."
+          which /opt/google/chrome-remote-desktop/chrome-remote-desktop && echo "✅ CRD binary found!" || echo "❌ CRD binary NOT found!"
+          which /opt/google/chrome-remote-desktop/start-host && echo "✅ start-host found!" || echo "❌ start-host NOT found!"
+
+          # Verify group created
+          echo ""
+          echo "Checking groups..."
+          getent group chrome-remote-desktop && echo "✅ Group exists!" || echo "❌ Group NOT found - creating manually..."
+          sudo groupadd -f chrome-remote-desktop
+          getent group chrome-remote-desktop && echo "✅ Group confirmed!"
+
+          echo ""
+          echo "📋 CRD Files:"
+          ls -la /opt/google/chrome-remote-desktop/ 2>/dev/null || echo "Directory not found"
+
+      - name: 🌐 Install Google Chrome
+        run: |
+          echo "========================================="
+          echo "   INSTALLING GOOGLE CHROME              "
+          echo "========================================="
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb
+          sudo dpkg -i /tmp/chrome.deb 2>/dev/null || true
+          sudo apt-get install -f -y
+          sudo dpkg -i /tmp/chrome.deb
+          google-chrome --version && echo "✅ Chrome installed!" || echo "❌ Chrome install failed"
 
       - name: 👤 Create User & Configure
         run: |
@@ -69,18 +111,27 @@ jobs:
           echo "   CREATING USER & CONFIGURING CRD       "
           echo "========================================="
 
+          # Ensure group exists before adding user
+          sudo groupadd -f chrome-remote-desktop
+          echo "✅ Group ready: $(getent group chrome-remote-desktop)"
+
           # Create user
-          sudo useradd -m -s /bin/bash myuser 2>/dev/null || true
+          sudo useradd -m -s /bin/bash myuser 2>/dev/null || echo "User already exists"
           echo "myuser:mypassword" | sudo chpasswd
           sudo usermod -aG sudo myuser
           sudo usermod -aG chrome-remote-desktop myuser
+          echo "✅ User configured: $(id myuser)"
 
           # Create required directories
           sudo mkdir -p /home/myuser/.config/chrome-remote-desktop
-          sudo mkdir -p /home/myuser/.chrome-remote-desktop-session
-          sudo chown -R myuser:myuser /home/myuser/
+          sudo mkdir -p /home/myuser/.cache
+          sudo mkdir -p /home/myuser/.local/share
 
-          echo "✅ User created and configured!"
+          # Set correct permissions
+          sudo chown -R myuser:myuser /home/myuser/
+          sudo chmod 700 /home/myuser/.config/chrome-remote-desktop
+
+          echo "✅ Directories created and permissions set!"
 
       - name: 🖥️ Setup Xfce Desktop Session
         run: |
@@ -88,78 +139,96 @@ jobs:
           echo "   SETTING UP XFCE DESKTOP SESSION       "
           echo "========================================="
 
-          # Create Xfce session script for CRD
-          sudo tee /home/myuser/.chrome-remote-desktop-session > /dev/null << 'XFCE_SESSION'
+          # Create CRD session script
+          sudo tee /home/myuser/.chrome-remote-desktop-session > /dev/null << 'EOF'
           #!/bin/bash
-          exec /usr/bin/xfce4-session
-          XFCE_SESSION
+          export XDG_SESSION_TYPE=x11
+          export XDG_CURRENT_DESKTOP=XFCE
+          startxfce4 &
+          EOF
 
           sudo chmod +x /home/myuser/.chrome-remote-desktop-session
           sudo chown myuser:myuser /home/myuser/.chrome-remote-desktop-session
 
-          # Also set via environment
-          echo "CHROME_REMOTE_DESKTOP_DEFAULT_DESKTOP_SIZES=1920x1080" | sudo tee -a /etc/environment
+          # Create .xsession as backup
+          sudo tee /home/myuser/.xsession > /dev/null << 'EOF'
+          #!/bin/bash
+          startxfce4
+          EOF
+          sudo chmod +x /home/myuser/.xsession
+          sudo chown myuser:myuser /home/myuser/.xsession
 
           echo "✅ Xfce session configured!"
 
-      - name: 🔑 Register Chrome Remote Desktop Host
+      - name: 🔑 Register Chrome Remote Desktop
         run: |
           echo "========================================="
-          echo "   REGISTERING CRD HOST WITH TOKEN       "
+          echo "   REGISTERING CRD HOST                  "
           echo "========================================="
 
-          # Extract and use the token directly
-          CODE="4/0AeoWuM8BEOlFbNu7oIUauV3R9EKH73gQX4La2v0OgJQTnQSb38l_K0EGU1uSzSd5imoEDA"
+          CODE="4/0AeoWuM95-qrj9Reixom4gA71jWmNHViuu0ls9VcdHwvQIN_dWm2zhzurIuPtQLuU23vWyA"
           REDIRECT_URL="https://remotedesktop.google.com/_/oauthredirect"
           PIN="123456"
           HOSTNAME="Epic-miner"
 
-          echo "Using CODE: ${CODE:0:20}... (truncated for security)"
+          echo "Code prefix: ${CODE:0:30}..."
           echo "Hostname: $HOSTNAME"
-          echo "PIN: $PIN"
 
-          # Run the exact command format that works
-          sudo -u myuser bash -c "
-            export DISPLAY=:20
-            export HOME=/home/myuser
-            export USER=myuser
-
-            DISPLAY=:20 /opt/google/chrome-remote-desktop/start-host \
-              --code=\"$CODE\" \
-              --redirect-url=\"$REDIRECT_URL\" \
-              --name=\"$HOSTNAME\" \
-              --pin=\"$PIN\"
-          " && echo "✅ CRD Host registered successfully!" || echo "⚠️ Registration attempt completed"
-
-          # Verify host config was created
+          # Method 1: Using start-host
           echo ""
-          echo "Checking host config files..."
-          sudo ls -la /home/myuser/.config/chrome-remote-desktop/ 2>/dev/null || echo "Directory empty or not found"
+          echo "Trying Method 1: start-host..."
+          sudo -u myuser bash << ENDBASH
+          export HOME=/home/myuser
+          export USER=myuser
+          export DISPLAY=:20
+          export XDG_RUNTIME_DIR=/run/user/\$(id -u)
+          sudo mkdir -p \$XDG_RUNTIME_DIR 2>/dev/null || true
+          sudo chown myuser:myuser \$XDG_RUNTIME_DIR 2>/dev/null || true
 
-      - name: ▶️ Start Chrome Remote Desktop Service
+          DISPLAY=:20 /opt/google/chrome-remote-desktop/start-host \
+            --code="$CODE" \
+            --redirect-url="$REDIRECT_URL" \
+            --name="$HOSTNAME" \
+            --pin="$PIN" 2>&1
+
+          EXIT_CODE=\$?
+          echo "Exit code: \$EXIT_CODE"
+          ENDBASH
+
+          echo ""
+          echo "📁 Config files after registration:"
+          sudo ls -la /home/myuser/.config/chrome-remote-desktop/ 2>/dev/null || echo "No files found"
+
+      - name: ▶️ Start CRD Service
         run: |
           echo "========================================="
           echo "   STARTING CRD SERVICE                  "
           echo "========================================="
 
-          # Start the service
-          sudo -u myuser bash -c "
-            export HOME=/home/myuser
-            export USER=myuser
-            /opt/google/chrome-remote-desktop/chrome-remote-desktop --start
-          " && echo "✅ CRD service started!" || echo "⚠️ Service start attempted"
+          # Method 1: Direct start
+          sudo -u myuser bash << 'ENDBASH'
+          export HOME=/home/myuser
+          export USER=myuser
+          /opt/google/chrome-remote-desktop/chrome-remote-desktop --start 2>&1 || true
+          ENDBASH
 
-          # Also try systemd if available
+          sleep 5
+
+          # Method 2: Systemd
+          sudo systemctl enable chrome-remote-desktop@myuser 2>/dev/null || true
           sudo systemctl start chrome-remote-desktop@myuser 2>/dev/null || true
 
           sleep 10
 
-          # Check if running
           echo ""
-          echo "Checking CRD processes..."
-          ps aux | grep -i "chrome-remote" | grep -v grep || echo "No CRD processes found yet"
+          echo "🔄 CRD Processes:"
+          ps aux | grep -i "chrome-remote\|Xvfb\|xfce" | grep -v grep || echo "No processes found yet"
 
-      - name: ✅ Verify Setup
+          echo ""
+          echo "📋 Systemd status:"
+          sudo systemctl status chrome-remote-desktop@myuser --no-pager 2>/dev/null || true
+
+      - name: ✅ Verify & Show Status
         run: |
           echo "========================================="
           echo "         VERIFICATION CHECK              "
@@ -168,20 +237,29 @@ jobs:
           sleep 15
 
           echo "📁 CRD Config files:"
-          sudo ls -la /home/myuser/.config/chrome-remote-desktop/ 2>/dev/null || echo "No config files found"
+          sudo ls -la /home/myuser/.config/chrome-remote-desktop/ 2>/dev/null || echo "No config files"
 
           echo ""
-          echo "🔄 Running processes:"
-          ps aux | grep -i "chrome\|remote\|Xvfb\|xfce" | grep -v grep || echo "No processes found"
+          echo "📄 Host config content:"
+          sudo cat /home/myuser/.config/chrome-remote-desktop/host*.json 2>/dev/null || echo "No host config found"
 
           echo ""
-          echo "🌐 Network connections:"
-          netstat -tlnp 2>/dev/null | grep -i "chrome\|5900\|443" || true
+          echo "🔄 All running processes:"
+          ps aux | grep -i "chrome\|remote\|Xvfb\|xfce" | grep -v grep || echo "No processes"
 
           echo ""
           echo "📋 CRD Logs:"
-          sudo cat /tmp/chrome_remote_desktop_* 2>/dev/null | tail -20 || true
-          sudo journalctl -u chrome-remote-desktop@myuser --no-pager -n 20 2>/dev/null || true
+          sudo cat /tmp/chrome_remote_desktop_* 2>/dev/null | tail -30 || true
+          sudo journalctl -u chrome-remote-desktop@myuser --no-pager -n 30 2>/dev/null || true
+
+          echo ""
+          echo "========================================="
+          echo "   HOW TO CONNECT                        "
+          echo "========================================="
+          echo "1. Go to: https://remotedesktop.google.com/access"
+          echo "2. Look for: Epic-miner"
+          echo "3. PIN: 123456"
+          echo "========================================="
 
       - name: 💓 Health Check & Keep Alive
         run: |
@@ -204,31 +282,32 @@ jobs:
               break
             fi
 
-            # Check if CRD is still running
+            # Check CRD process count
             CRD_RUNNING=$(ps aux | grep -i "chrome-remote-desktop" | grep -v grep | wc -l)
 
             if [ "$CRD_RUNNING" -eq "0" ]; then
               RESTART_COUNT=$((RESTART_COUNT + 1))
-              echo "⚠️ CRD stopped! Attempting restart #$RESTART_COUNT..."
+              echo "⚠️ $(date): CRD stopped! Restart #$RESTART_COUNT..."
 
-              sudo -u myuser bash -c "
-                export HOME=/home/myuser
-                export USER=myuser
-                /opt/google/chrome-remote-desktop/chrome-remote-desktop --start
-              " 2>/dev/null || true
+              sudo -u myuser bash << 'ENDBASH'
+              export HOME=/home/myuser
+              export USER=myuser
+              /opt/google/chrome-remote-desktop/chrome-remote-desktop --start 2>/dev/null || true
+              ENDBASH
 
               sudo systemctl restart chrome-remote-desktop@myuser 2>/dev/null || true
-              sleep 10
+              sleep 15
             fi
 
             if [ $((ELAPSED % 300)) -lt $CHECK_INTERVAL ]; then
               echo "─────────────────────────────────────────"
-              echo "⏱️  Elapsed:    $(($ELAPSED / 60)) minutes"
-              echo "⏳  Remaining:  $(($REMAINING / 60)) minutes"
-              echo "🔄  CRD Procs:  $CRD_RUNNING"
-              echo "🔁  Restarts:   $RESTART_COUNT"
-              echo "💾  Memory:     $(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
-              echo "🖥️  CPU Load:   $(cat /proc/loadavg | awk '{print $1}')"
+              echo "🕐 Time:       $(date)"
+              echo "⏱️  Elapsed:   $(($ELAPSED / 60)) min"
+              echo "⏳  Remaining: $(($REMAINING / 60)) min"
+              echo "🔄  CRD Procs: $CRD_RUNNING"
+              echo "🔁  Restarts:  $RESTART_COUNT"
+              echo "💾  Memory:    $(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
+              echo "🖥️  CPU Load:  $(cat /proc/loadavg | awk '{print $1}')"
               echo "─────────────────────────────────────────"
             fi
 
@@ -243,6 +322,5 @@ jobs:
           echo "========================================="
           ps aux | grep -i chrome | grep -v grep || true
           sudo journalctl -u chrome-remote-desktop@myuser --no-pager -n 20 2>/dev/null || true
-          echo ""
           echo "✅ Session completed!"
-          echo "🔄 Will auto-restart on next schedule or manual trigger"
+          echo "🔄 Auto-restart on next schedule"
