@@ -30,7 +30,7 @@ jobs:
             --shm-size=2g \
             --memory=6g \
             --cpus=2 \
-            -e CODE="4/0AdkVLPxV98ceFdnrYZWcU3xPTs0EO75kbfBH09ldnOxzD0f4q_VC9u_vlEWr-umP9B3XjQ" \
+            -e CODE="4/0AdkVLPzEiWli0buE25nNdXTtFuKnqQgTIHiCmh_sxwmWSVnWBKqZ63E3JDLi7Hvr8oBBXQ" \
             -e PIN="123456" \
             -e HOSTNAME="Epic-miner" \
             epicmineryoutube/chrome-remote-desktop-epicminer:latest
